@@ -31,7 +31,7 @@
   <artifactId>parent</artifactId>
   <packaging>pom</packaging>
   <!-- to change version: mvn -\-batch-mode release:update-versions -DdevelopmentVersion=3.6.0-SNAPSHOT -->
-  <version>3.7.0-SNAPSHOT</version>
+  <version>${revision}</version>
   <name>Apache ZooKeeper</name>
   <description>
     ZooKeeper is a centralized service for maintaining configuration information, naming,
@@ -262,6 +262,13 @@
       </modules>
     </profile>
     <profile>
+      <id>fatjar</id>
+      <modules>
+        <module>zookeeper-it</module>
+        <module>zookeeper-contrib/zookeeper-contrib-fatjar</module>
+      </modules>
+    </profile>
+    <profile>
       <id>java-build</id>
       <activation>
         <activeByDefault>true</activeByDefault>
@@ -310,6 +317,7 @@
   </profiles>
 
   <properties>
+    <revision>3.7.0-SNAPSHOT</revision>
     <!-- maven properties -->
     <maven.compiler.source>1.8</maven.compiler.source>
     <maven.compiler.target>1.8</maven.compiler.target>
