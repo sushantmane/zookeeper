@@ -107,23 +107,36 @@ class QuorumPeerInstance implements Instance {
             } else {
                 System.setProperty("zookeeper.leaderServes", "yes");
             }
+
+            String icIp = System.getProperty("test.ic.ip");
+            InetAddress inetAddress = null;
+            try {
+                if (icIp != null) {
+                    inetAddress = InetAddress.getByName(icIp);
+                } else {
+                    inetAddress = InetAddress.getLocalHost();
+                }
+            } catch (Exception notExpected) {
+                notExpected.printStackTrace();
+            }
+
             // Let's grab two ports
             try {
-                ServerSocket ss = new ServerSocket(0, 1, InetAddress.getLocalHost());
+                ServerSocket ss = new ServerSocket(0, 1, inetAddress);
                 clientAddr = (InetSocketAddress) ss.getLocalSocketAddress();
                 ss.close();
             } catch(IOException e) {
                 e.printStackTrace();
             }
             try {
-                ServerSocket ss = new ServerSocket(0, 1, InetAddress.getLocalHost());
+                ServerSocket ss = new ServerSocket(0, 1, inetAddress);
                 quorumLeaderAddr = (InetSocketAddress) ss.getLocalSocketAddress();
                 ss.close();
             } catch(IOException e) {
                 e.printStackTrace();
             }
             try {
-                ServerSocket ss = new ServerSocket(0, 1, InetAddress.getLocalHost());
+                ServerSocket ss = new ServerSocket(0, 1, inetAddress);
                 quorumLeaderElectionAddr = (InetSocketAddress) ss.getLocalSocketAddress();
                 ss.close();
             } catch(IOException e) {

@@ -21,6 +21,7 @@ package org.apache.zookeeper.test.system;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Set;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -190,7 +191,22 @@ public class InstanceManager implements AsyncCallback.ChildrenCallback, Watcher 
                 }
             }
         }
-        for(Entry<String, HashSet<Assigned>> e: assignments.entrySet()) {
+
+        Set<Entry<String, HashSet<Assigned>>> ics = new HashSet<>();
+        for (Entry<String, HashSet<Assigned>> e: assignments.entrySet()) {
+            if (name.startsWith("client") && e.getKey().startsWith("cic-")) {
+                ics.add(e);
+            } else if (name.startsWith("server") && e.getKey().startsWith("sic-")) {
+                ics.add(e);
+            }
+        }
+
+        // default case
+        if (ics.size() == 0) {
+            ics = assignments.entrySet();
+        }
+
+        for(Entry<String, HashSet<Assigned>> e: ics) {
             int w = 0;
             for(Assigned a: e.getValue()) {
                 w += a.weight;
