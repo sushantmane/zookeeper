@@ -19,6 +19,8 @@
 package org.apache.zookeeper.server;
 
 import java.nio.ByteBuffer;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.zip.CRC32;
 import org.apache.zookeeper.ZooDefs;
 import org.apache.zookeeper.data.StatPersisted;
@@ -32,6 +34,18 @@ public class DigestCalculator {
     // we changed the digest method or fields.
     private static final int DIGEST_VERSION = 2;
 
+    private Fingerprint fp;
+
+    public DigestCalculator() {
+        if (!ZooKeeperServer.isDigestEnabled()) {
+            return;
+        }
+        if ("CRC-32".equals(ZooKeeperServer.getDigestAlgo())) {
+            fp = new CrcFingerprint();
+        } else {
+            fp = new MdFingerprint();
+        }
+    }
 
     /**
      * Calculate the digest based on the given params.
@@ -94,13 +108,18 @@ public class DigestCalculator {
         bb.putInt(stat.getAversion());
         bb.putLong(stat.getEphemeralOwner());
 
-        CRC32 crc = new CRC32();
-        crc.update(path.getBytes());
+        int dataSize = 0;
         if (data != null) {
-            crc.update(data);
+            dataSize = data.length;
         }
-        crc.update(b);
-        return crc.getValue();
+        byte[] buf = new byte[path.length() + b.length + dataSize];
+        ByteBuffer wrapper = ByteBuffer.wrap(buf);
+        wrapper.put(path.getBytes());
+        if (data != null) {
+            wrapper.put(data);
+        }
+        wrapper.put(b);
+        return fp.get(buf);
     }
 
     /**
@@ -121,4 +140,51 @@ public class DigestCalculator {
         return DIGEST_VERSION;
     }
 
+
+    // todo: move to separate files
+    interface Fingerprint {
+
+        long get(byte[] data);
+    }
+
+    class MdFingerprint implements Fingerprint {
+
+        private MessageDigest md;
+
+        MdFingerprint() {
+            try {
+                md = MessageDigest.getInstance(ZooKeeperServer.getDigestAlgo());
+            } catch (NoSuchAlgorithmException notExpected) {
+                throw new IllegalStateException("Unsupported message digest algorithm");
+            }
+        }
+
+        @Override
+        public long get(byte[] data) {
+            md.reset();
+            md.update(data);
+            return getLongVal(md.digest(), 0, 8);
+        }
+
+        private long getLongVal(byte[] digest, int offset, int length) {
+            long val = 0;
+            for (int i = offset; i < offset + length; i++) {
+                val <<= 8;
+                val ^=  digest[i] & 0xFF;
+            }
+            return val;
+        }
+    }
+
+    class CrcFingerprint implements Fingerprint {
+
+        private CRC32 crc = new CRC32();
+
+        @Override
+        public long get(byte[] data) {
+            crc.reset();
+            crc.update(data);
+            return crc.getValue();
+        }
+    }
 }

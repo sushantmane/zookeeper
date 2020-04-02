@@ -56,38 +56,40 @@ import org.apache.zookeeper.data.Stat;
 import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.common.Time;
 
-
 public class GenerateLoad {
+
     protected static final Logger LOG = LoggerFactory.getLogger(GenerateLoad.class);
 
     static ServerSocket ss;
-
-    static Set<SlaveThread> slaves = Collections
-            .synchronizedSet(new HashSet<SlaveThread>());
-
+    static Set<SlaveThread> slaves = Collections.synchronizedSet(new HashSet<SlaveThread>());
     static Map<Long, Long> totalByTime = new HashMap<Long, Long>();
-
     volatile static long currentInterval;
-
     static long lastChange;
-
     static PrintStream sf;
     static PrintStream tf;
+    static PrintStream lfp;
+    static PrintStream clf;
+
+    static final String handshake = "Hello";
+
     static {
         try {
             tf = new PrintStream(new FileOutputStream("trace"));
+            lfp = new PrintStream(new FileOutputStream("request-trace.log"));
+            clf = new PrintStream(new FileOutputStream("count.log"));
         } catch (FileNotFoundException e) {
             e.printStackTrace();
         }
     }
 
-    static final int INTERVAL = 6000;
+    static final long INTERVAL = 6000;
 
     synchronized static void add(long time, int count, Socket s) {
-        long interval = time / INTERVAL;
+        long interval = time / (1000000 * INTERVAL);
+        lfp.println(s + " rt:" + time + " mt:" + System.nanoTime() + " it:" + interval+ " cit:" + currentInterval + " cnt:" + count);
+
         if (currentInterval == 0 || currentInterval > interval) {
-            System.out.println(
-                "Dropping " + count + " for " + new Date(time)
+            System.out.println("Dropping " + count + " for " + new Date(time)
                     + " " + currentInterval + ">" + interval);
             return;
         }
@@ -102,11 +104,15 @@ public class GenerateLoad {
     }
 
     synchronized static long remove(long interval) {
+        clf.println("it:" + interval + " cit:" + currentInterval + " tbt:" + totalByTime);
         Long total = totalByTime.remove(interval);
         return total == null ? -1 : total;
     }
 
+
+    // this thread runs on controller node; one thread per client
     static class SlaveThread extends Thread {
+
         Socket s;
 
         SlaveThread(Socket s) {
@@ -118,14 +124,18 @@ public class GenerateLoad {
         public void run() {
             try {
                 System.out.println("Connected to " + s);
-                BufferedReader is = new BufferedReader(new InputStreamReader(s
-                        .getInputStream()));
-                String result;
-                while ((result = is.readLine()) != null) {
+                BufferedReader is = new BufferedReader(new InputStreamReader(s.getInputStream()));
+                String result = is.readLine();
+                if (GenerateLoad.handshake.equals(result)) {
+                    String time = System.nanoTime() + "\n";
+                    s.getOutputStream().write(time.getBytes());
+                    result = is.readLine();
+                }
+
+                while (result != null) {
                     String timePercentCount[] = result.split(" ");
                     if (timePercentCount.length != 5) {
-                        System.err.println("Got " + result + " from " + s
-                                + " exitng.");
+                        System.err.println("Got " + result + " from " + s + " exitng.");
                         throw new IOException(result);
                     }
                     long time = Long.parseLong(timePercentCount[0]);
@@ -136,6 +146,7 @@ public class GenerateLoad {
                         System.out.println(s + " Got an error! " + errs);
                     }
                     add(time, count, s);
+                    result = is.readLine();
                 }
             } catch (Exception e) {
                 e.printStackTrace();
@@ -198,7 +209,8 @@ public class GenerateLoad {
 
         public void run() {
             try {
-                currentInterval = Time.currentElapsedTime() / INTERVAL;
+//                currentInterval = Time.currentElapsedTime() / INTERVAL;
+                currentInterval = System.nanoTime() / (1000000L * INTERVAL);
                 // Give things time to report;
                 Thread.sleep(INTERVAL * 2);
                 long min = 99999;
@@ -267,32 +279,23 @@ public class GenerateLoad {
         lastChange = now;
     }
 
-    static public class GeneratorInstance implements Instance {
+    public static class GeneratorInstance implements Instance {
 
         byte bytes[];
-
         int percentage = -1;
-
         int errors;
-
         final Object statSync = new Object();
-
         int finished;
-
         int reads;
-
         int writes;
-
         int rlatency;
-
         int wlatency;
-
         int outstanding;
-
         volatile boolean alive;
+        long timeDrift = 0;
 
-        class ZooKeeperThread extends Thread implements Watcher, DataCallback,
-                StatCallback {
+        class ZooKeeperThread extends Thread implements Watcher, DataCallback, StatCallback {
+
             String host;
 
             ZooKeeperThread(String host) {
@@ -317,9 +320,7 @@ public class GenerateLoad {
             }
 
             Random r = new Random();
-
             String path;
-
             ZooKeeper zk;
 
             boolean connected;
@@ -335,9 +336,7 @@ public class GenerateLoad {
                     for (int i = 0; i < 300; i++) {
                         try {
                             Thread.sleep(100);
-                            path = zk.create("/client", new byte[16],
-                                    Ids.OPEN_ACL_UNSAFE,
-                                    CreateMode.EPHEMERAL_SEQUENTIAL);
+                            path = zk.create("/client", new byte[16], Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL_SEQUENTIAL);
                             break;
                         } catch (KeeperException e) {
                             LOG.error("keeper exception thrown", e);
@@ -349,11 +348,9 @@ public class GenerateLoad {
                     }
                     while (alive) {
                         if (r.nextInt(100) < percentage) {
-                            zk.setData(path, bytes, -1, this, System
-                                    .currentTimeMillis());
+                            zk.setData(path, bytes, -1, this, System.currentTimeMillis());
                         } else {
-                            zk.getData(path, false, this, System
-                                    .currentTimeMillis());
+                            zk.getData(path, false, this, System.currentTimeMillis());
                         }
                         incOutstanding();
                     }
@@ -379,8 +376,7 @@ public class GenerateLoad {
                 }
             }
 
-            public void processResult(int rc, String path, Object ctx, byte[] data,
-                    Stat stat) {
+            public void processResult(int rc, String path, Object ctx, byte[] data, Stat stat) {
                 decOutstanding();
                 synchronized (statSync) {
                     if (!alive) {
@@ -431,9 +427,8 @@ public class GenerateLoad {
                         if (percentage == -1 || (finished == 0 && errors == 0)) {
                             continue;
                         }
-                        String report = Time.currentElapsedTime() + " "
-                                + percentage + " " + finished + " " + errors + " "
-                                + outstanding + "\n";
+//                        long ts = ;
+                        String report = (System.nanoTime() + timeDrift) + " " + percentage + " " + finished + " "+ errors + " " + outstanding + "\n";
                        /* String subreport = reads + " "
                                 + (((double) rlatency) / reads) + " " + writes
                                 + " " + (((double) wlatency / writes)); */
@@ -446,12 +441,12 @@ public class GenerateLoad {
                             wlatency = 0;
                         }
                         os.write(report.getBytes());
+                        System.out.println("report: " + report);
                         //System.out.println("Reporting " + report + "+" + subreport);
                     }
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
-
             }
         }
 
@@ -477,11 +472,20 @@ public class GenerateLoad {
                         }
                         bytes = new byte[bytesSize];
                         s = new Socket(hostPort[0], Integer.parseInt(hostPort[1]));
+                        BufferedReader is = new BufferedReader(new InputStreamReader(s.getInputStream()));
+                        // hello meg to server<--->time from server
+                        s.getOutputStream().write((handshake + "\n").getBytes());
+                        long t1 = System.nanoTime();
+                        String line = is.readLine();
+                        long t3 = System.nanoTime();
+                        if (line != null) {
+                            long t2 = Long.parseLong(line);
+                            timeDrift = t2 - t3;
+                        }
                         zkThread = new ZooKeeperThread(parts[0]);
                         sendThread = new SenderThread(s);
-                        BufferedReader is = new BufferedReader(new InputStreamReader(s
-                                .getInputStream()));
-                        String line;
+                        // todo: we can get the time from the server::nanoTime
+                        // calculate the drift and use if for further report
                         while ((line = is.readLine()) != null) {
                             percentage = Integer.parseInt(line);
                         }
@@ -490,7 +494,6 @@ public class GenerateLoad {
                     }
                 }
             }.start();
-
         }
 
         public void setReporter(Reporter r) {
@@ -530,7 +533,6 @@ public class GenerateLoad {
                 e.printStackTrace();
             }
         }
-
     }
 
     private static class StatusWatcher implements Watcher {
@@ -545,8 +547,7 @@ public class GenerateLoad {
             }
         }
 
-        synchronized public boolean waitConnected(long timeout)
-                throws InterruptedException {
+        synchronized public boolean waitConnected(long timeout) throws InterruptedException {
             long endTime = Time.currentElapsedTime() + timeout;
             while (!connected && Time.currentElapsedTime() < endTime) {
                 wait(endTime - Time.currentElapsedTime());
@@ -612,8 +613,7 @@ public class GenerateLoad {
                     quorumHostPort.append(";"+(r[0].split(":"))[1]); // Appending ";clientPort"
                 }
                 for (int i = 0; i < serverCount; i++) {
-                    QuorumPeerInstance.startInstance(im, quorumHostPort
-                            .toString(), i);
+                    QuorumPeerInstance.startInstance(im, quorumHostPort.toString(), i);
                 }
                 if (leaderOnly) {
                     int tries = 0;
@@ -639,47 +639,41 @@ public class GenerateLoad {
                             }
                         }
                 }
+
+                String icIp = System.getProperty("test.ic.ip");
+                if (icIp == null) {
+                    icIp = InetAddress.getLocalHost().getCanonicalHostName();
+                }
                 for (int i = 0; i < clientCount; i++) {
                     im.assignInstance("client" + i, GeneratorInstance.class,
-                            zkHostPort.toString()
-                                    + ' '
-                                    + InetAddress.getLocalHost()
-                                            .getCanonicalHostName() + ':'
-                                    + port, 1);
+                            zkHostPort.toString() + ' ' + icIp + ':' + port, 1);
                 }
                 new AcceptorThread();
                 new ReporterThread();
-                BufferedReader is = new BufferedReader(new InputStreamReader(
-                        System.in));
+                BufferedReader is = new BufferedReader(new InputStreamReader(System.in));
                 String line;
                 while ((line = is.readLine()) != null) {
                     try {
                         String cmdNumber[] = line.split(" ");
-                        if (cmdNumber[0].equals("percentage")
-                                && cmdNumber.length > 1) {
+                        if (cmdNumber[0].equals("percentage") && cmdNumber.length > 1) {
                             int number = Integer.parseInt(cmdNumber[1]);
                             if (number < 0 || number > 100) {
-                                throw new NumberFormatException(
-                                        "must be between 0 and 100");
+                                throw new NumberFormatException("must be between 0 and 100");
                             }
                             sendChange(number);
-                        } else if (cmdNumber[0].equals("sleep")
-                                && cmdNumber.length > 1) {
+                        } else if (cmdNumber[0].equals("sleep") && cmdNumber.length > 1) {
                             int number = Integer.parseInt(cmdNumber[1]);
                             Thread.sleep(number * 1000);
-                        } else if (cmdNumber[0].equals("save")
-                                && cmdNumber.length > 1) {
+                        } else if (cmdNumber[0].equals("save") && cmdNumber.length > 1) {
                             sf = new PrintStream(cmdNumber[1]);
                         } else {
                             System.err.println("Commands must be:");
-                            System.err
-                                    .println("\tpercentage new_write_percentage");
+                            System.err.println("\tpercentage new_write_percentage");
                             System.err.println("\tsleep seconds_to_sleep");
                             System.err.println("\tsave file_to_save_output");
                         }
                     } catch (NumberFormatException e) {
-                        System.out.println("Not a valid number: "
-                                + e.getMessage());
+                        System.out.println("Not a valid number: " + e.getMessage());
                     }
                 }
             } catch (NumberFormatException e) {
@@ -691,7 +685,6 @@ public class GenerateLoad {
         } else {
             doUsage();
         }
-
     }
 
     private static String getMode(String hostPort) throws NumberFormatException, UnknownHostException, IOException {
