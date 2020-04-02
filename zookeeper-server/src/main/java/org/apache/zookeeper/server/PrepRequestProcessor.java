@@ -104,6 +104,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements Req
 
     private final RequestProcessor nextProcessor;
     private final boolean digestEnabled;
+    private final boolean predictiveDigest;
     private DigestCalculator digestCalculator;
 
     ZooKeeperServer zks;
@@ -120,6 +121,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements Req
         this.nextProcessor = nextProcessor;
         this.zks = zks;
         this.digestEnabled = ZooKeeperServer.isDigestEnabled();
+        this.predictiveDigest = ZooKeeperServer.isPrecalculateDigest();
         if (this.digestEnabled) {
             this.digestCalculator = new DigestCalculator();
         }
@@ -642,7 +644,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements Req
 
         // If the txn is not going to mutate anything, like createSession,
         // we just set the current tree digest in it
-        if (request.getTxnDigest() == null && digestEnabled) {
+        if (request.getTxnDigest() == null && digestEnabled && predictiveDigest) {
             setTxnDigest(request);
         }
     }
@@ -1081,6 +1083,10 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements Req
             byte[] data, StatPersisted s) throws KeeperException.NoNodeException {
 
         if (!digestEnabled) {
+            return null;
+        }
+
+        if (!predictiveDigest) {
             return null;
         }
 

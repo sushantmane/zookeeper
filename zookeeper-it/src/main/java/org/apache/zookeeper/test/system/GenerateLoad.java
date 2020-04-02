@@ -198,7 +198,7 @@ public class GenerateLoad {
 
         public void run() {
             try {
-                currentInterval = Time.currentElapsedTime() / INTERVAL;
+                currentInterval = Time.currentElapsedTimeInMilli() / INTERVAL;
                 // Give things time to report;
                 Thread.sleep(INTERVAL * 2);
                 long min = 99999;
@@ -206,7 +206,7 @@ public class GenerateLoad {
                 long total = 0;
                 int number = 0;
                 while (true) {
-                    long now = Time.currentElapsedTime();
+                    long now = Time.currentElapsedTimeInMilli();
                     long lastInterval = currentInterval;
                     currentInterval += 1;
                     long count = remove(lastInterval);
@@ -253,13 +253,13 @@ public class GenerateLoad {
     }
 
     synchronized static void sendChange(int percentage) {
-        long now = Time.currentElapsedTime();
+        long now = Time.currentElapsedTimeInMilli();
         long start = now;
         ReporterThread.percentage = percentage;
         for (SlaveThread st : slaves.toArray(new SlaveThread[0])) {
             st.send(percentage);
         }
-        now = Time.currentElapsedTime();
+        now = Time.currentElapsedTimeInMilli();
         long delay = now - start;
         if (delay > 1000) {
             System.out.println("Delay of " + delay + " to send new percentage");
@@ -391,7 +391,7 @@ public class GenerateLoad {
                         errors++;
                     } else {
                         finished++;
-                        rlatency += Time.currentElapsedTime() - (Long) ctx;
+                        rlatency += Time.currentElapsedTimeInMilli() - (Long) ctx;
                         reads++;
                     }
                 }
@@ -405,7 +405,7 @@ public class GenerateLoad {
                         errors++;
                     } else {
                         finished++;
-                        wlatency += Time.currentElapsedTime() - (Long) ctx;
+                        wlatency += Time.currentElapsedTimeInMilli() - (Long) ctx;
                         writes++;
                     }
                 }
@@ -431,7 +431,7 @@ public class GenerateLoad {
                         if (percentage == -1 || (finished == 0 && errors == 0)) {
                             continue;
                         }
-                        String report = Time.currentElapsedTime() + " "
+                        String report = Time.currentElapsedTimeInMilli() + " "
                                 + percentage + " " + finished + " " + errors + " "
                                 + outstanding + "\n";
                        /* String subreport = reads + " "
@@ -547,9 +547,9 @@ public class GenerateLoad {
 
         synchronized public boolean waitConnected(long timeout)
                 throws InterruptedException {
-            long endTime = Time.currentElapsedTime() + timeout;
-            while (!connected && Time.currentElapsedTime() < endTime) {
-                wait(endTime - Time.currentElapsedTime());
+            long endTime = Time.currentElapsedTimeInMilli() + timeout;
+            while (!connected && Time.currentElapsedTimeInMilli() < endTime) {
+                wait(endTime - Time.currentElapsedTimeInMilli());
             }
             return connected;
         }
@@ -645,7 +645,7 @@ public class GenerateLoad {
                                     + ' '
                                     + InetAddress.getLocalHost()
                                             .getCanonicalHostName() + ':'
-                                    + port, 1);
+                                    + port + " " + args[4], 1);
                 }
                 new AcceptorThread();
                 new ReporterThread();

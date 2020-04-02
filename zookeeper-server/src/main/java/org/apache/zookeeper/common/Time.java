@@ -29,10 +29,15 @@ public class Time {
      * Time.currentElapsedTime will change but nanoTime won't. On the other hand,
      * all of ZK assumes that time is measured in milliseconds.
      * @return The time in milliseconds from some arbitrary point in time.
-     */
+//     */
     public static long currentElapsedTime() {
         return System.nanoTime() / 1000000;
     }
+
+    public static long currentElapsedTimeInMilli() {
+        return System.currentTimeMillis();
+    }
+
 
     /**
      * Explicitly returns system dependent current wall time.

@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
 import java.nio.ByteBuffer;
+import java.security.Security;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -111,7 +112,11 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
 
     public static final String ALLOW_SASL_FAILED_CLIENTS = "zookeeper.allowSaslFailedClients";
     public static final String ZOOKEEPER_DIGEST_ENABLED = "zookeeper.digest.enabled";
+    public static final String ZOOKEEPER_PREDICTIVE_DIGEST = "zookeeper.predictive.digest";
+    public static final String ZOOKEEPER_DIGEST_ALGORITHM = "zookeeper.digest.algorithm";
     private static boolean digestEnabled;
+    private static boolean predictiveDigest;
+    private static String digestAlgo;
 
     // Add a enable/disable option for now, we should remove this one when
     // this feature is confirmed to be stable
@@ -135,6 +140,16 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
 
         digestEnabled = Boolean.parseBoolean(System.getProperty(ZOOKEEPER_DIGEST_ENABLED, "true"));
         LOG.info("{} = {}", ZOOKEEPER_DIGEST_ENABLED, digestEnabled);
+        if (digestEnabled) {
+            digestAlgo = System.getProperty(ZOOKEEPER_DIGEST_ALGORITHM, "CRC-32");
+            Set<String> algorithms = Security.getAlgorithms("MessageDigest");
+            if (!("CRC-32".equals(digestAlgo) || algorithms.contains(digestAlgo))) {
+                throw new IllegalArgumentException("Unknown hash function: " + digestAlgo);
+            }
+            LOG.info("{} = {}", ZOOKEEPER_DIGEST_ALGORITHM, digestAlgo);
+            predictiveDigest = Boolean.parseBoolean(System.getProperty(ZOOKEEPER_PREDICTIVE_DIGEST, "true"));
+            LOG.info("{} = {}", ZOOKEEPER_PREDICTIVE_DIGEST, predictiveDigest);
+        }
 
         closeSessionTxnEnabled = Boolean.parseBoolean(
                 System.getProperty(CLOSE_SESSION_TXN_ENABLED, "true"));
@@ -1984,6 +1999,14 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     public static void setDigestEnabled(boolean digestEnabled) {
         LOG.info("{} = {}", ZOOKEEPER_DIGEST_ENABLED, digestEnabled);
         ZooKeeperServer.digestEnabled = digestEnabled;
+    }
+
+    public static String getDigestAlgo() {
+        return digestAlgo;
+    }
+
+    public static boolean isPrecalculateDigest() {
+        return predictiveDigest;
     }
 
     /**
