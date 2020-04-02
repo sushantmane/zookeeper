@@ -19,6 +19,8 @@
 package org.apache.zookeeper.server;
 
 import java.nio.ByteBuffer;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.zip.CRC32;
 import org.apache.zookeeper.ZooDefs;
 import org.apache.zookeeper.data.StatPersisted;
@@ -94,13 +96,47 @@ public class DigestCalculator {
         bb.putInt(stat.getAversion());
         bb.putLong(stat.getEphemeralOwner());
 
-        CRC32 crc = new CRC32();
-        crc.update(path.getBytes());
+        int dataSize = 0;
         if (data != null) {
-            crc.update(data);
+            dataSize = data.length;
         }
-        crc.update(b);
-        return crc.getValue();
+        byte[] buf = new byte[path.length() + b.length + dataSize];
+        ByteBuffer wrapper = ByteBuffer.wrap(buf);
+        wrapper.put(path.getBytes());
+        if (data != null) {
+            wrapper.put(data);
+        }
+        wrapper.put(b);
+        return getDigest(buf);
+    }
+
+    private long getDigest(byte[] data) {
+        if ("CRC-32".equals(ZooKeeperServer.getDigestAlgo())) {
+            CRC32 crc = new CRC32();
+            crc.update(data);
+            return crc.getValue();
+        }
+        long l = 0;
+        try {
+            MessageDigest md = MessageDigest.getInstance(ZooKeeperServer.getDigestAlgo());
+            md.update(data);
+            // get long value from 8 most significant bytes of digest
+            l = getLongVal(md.digest(), 0, 8);
+            // l = ByteBuffer.wrap(md.digest()).getLong(0);
+        } catch (NoSuchAlgorithmException notExpected) {
+            // todo: take some action?
+        }
+        return l;
+    }
+
+    // todo: check if offset + length < digest size
+    private static long getLongVal(byte[] digest, int offset, int length) {
+        long val = 0;
+        for (int i = offset; i < offset + length; i++) {
+            val <<= 8;
+            val ^=  digest[i] & 0xFF;
+        }
+        return val;
     }
 
     /**
