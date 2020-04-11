@@ -37,6 +37,9 @@ public class DigestCalculator {
     private Fingerprint fp;
 
     public DigestCalculator() {
+        if (!ZooKeeperServer.isDigestEnabled()) {
+            return;
+        }
         if ("CRC-32".equals(ZooKeeperServer.getDigestAlgo())) {
             fp = new CrcFingerprint();
         } else {
