@@ -140,6 +140,8 @@ public class DigestCalculator {
         return DIGEST_VERSION;
     }
 
+
+    // todo: move to separate files
     interface Fingerprint {
 
         long get(byte[] data);
@@ -151,7 +153,6 @@ public class DigestCalculator {
 
         MdFingerprint() {
             try {
-                System.out.println("****** Creating Message Digest ******");
                 md = MessageDigest.getInstance(ZooKeeperServer.getDigestAlgo());
             } catch (NoSuchAlgorithmException notExpected) {
                 throw new IllegalStateException("Unsupported message digest algorithm");

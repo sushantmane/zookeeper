@@ -111,8 +111,10 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     public static final String SASL_AUTH_SCHEME = "sasl";
 
     public static final String ZOOKEEPER_DIGEST_ENABLED = "zookeeper.digest.enabled";
+    public static final String ZOOKEEPER_PREDICTIVE_DIGEST = "zookeeper.predictive.digest";
     public static final String ZOOKEEPER_DIGEST_ALGORITHM = "zookeeper.digest.algorithm";
     private static boolean digestEnabled;
+    private static boolean predictiveDigest;
     private static String digestAlgo;
 
     // Add a enable/disable option for now, we should remove this one when
@@ -144,6 +146,8 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
                 throw new IllegalArgumentException("Unknown hash function: " + digestAlgo);
             }
             LOG.info("{} = {}", ZOOKEEPER_DIGEST_ALGORITHM, digestAlgo);
+            predictiveDigest = Boolean.parseBoolean(System.getProperty(ZOOKEEPER_PREDICTIVE_DIGEST, "true"));
+            LOG.info("{} = {}", ZOOKEEPER_PREDICTIVE_DIGEST, predictiveDigest);
         }
 
         closeSessionTxnEnabled = Boolean.parseBoolean(
@@ -1967,6 +1971,10 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
 
     public static String getDigestAlgo() {
         return digestAlgo;
+    }
+
+    public static boolean isPrecalculateDigest() {
+        return predictiveDigest;
     }
 
     /**
