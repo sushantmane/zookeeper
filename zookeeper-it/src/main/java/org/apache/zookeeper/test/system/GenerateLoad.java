@@ -70,7 +70,7 @@ public class GenerateLoad {
     static PrintStream lfp;
     static PrintStream clf;
 
-    static final String handshake = "Hello";
+    static final String HANDSHAKE = "Hello";
 
     static {
         try {
@@ -86,7 +86,7 @@ public class GenerateLoad {
 
     synchronized static void add(long time, int count, Socket s) {
         long interval = time / (1000000 * INTERVAL);
-        lfp.println(s + " rt:" + time + " mt:" + System.nanoTime() + " it:" + interval+ " cit:" + currentInterval + " cnt:" + count);
+//        lfp.println(s + " rt:" + time + " mt:" + System.nanoTime() + " it:" + interval+ " cit:" + currentInterval + " cnt:" + count);
 
         if (currentInterval == 0 || currentInterval > interval) {
             System.out.println("Dropping " + count + " for " + new Date(time)
@@ -104,7 +104,7 @@ public class GenerateLoad {
     }
 
     synchronized static long remove(long interval) {
-        clf.println("it:" + interval + " cit:" + currentInterval + " tbt:" + totalByTime);
+//        clf.println("it:" + interval + " cit:" + currentInterval + " tbt:" + totalByTime);
         Long total = totalByTime.remove(interval);
         return total == null ? -1 : total;
     }
@@ -125,13 +125,29 @@ public class GenerateLoad {
             try {
                 System.out.println("Connected to " + s);
                 BufferedReader is = new BufferedReader(new InputStreamReader(s.getInputStream()));
-                String result = is.readLine();
-                if (GenerateLoad.handshake.equals(result)) {
-                    String time = System.nanoTime() + "\n";
-                    s.getOutputStream().write(time.getBytes());
-                    result = is.readLine();
-                }
+                String result = null;
 
+//                result = is.readLine();
+//                if (GenerateLoad.HANDSHAKE.equals(result)) {
+//                    String time = System.nanoTime() + "\n";
+//                    s.getOutputStream().write(time.getBytes());
+//                    result = is.readLine();
+//                }
+
+                int i = 0;
+                String localTime;
+                while (i++ < 1000) {
+                    result = is.readLine();
+                    localTime = System.nanoTime() + "\n";
+                    s.getOutputStream().write(localTime.getBytes());
+                }
+                result = is.readLine();
+                long tm = System.nanoTime();
+                System.out.println("client " + s + " - remote: " + result + " local: " + tm
+                        + " diff: " + (tm - Long.parseLong(result)));
+                s.getOutputStream().write(("DRIFT OK \n").getBytes());
+
+                result = is.readLine();
                 while (result != null) {
                     String timePercentCount[] = result.split(" ");
                     if (timePercentCount.length != 5) {
@@ -441,8 +457,8 @@ public class GenerateLoad {
                             wlatency = 0;
                         }
                         os.write(report.getBytes());
-                        System.out.println("report: " + report);
-                        //System.out.println("Reporting " + report + "+" + subreport);
+//                        System.out.println("report: " + report);
+//                        System.out.println("Reporting " + report + "+" + subreport);
                     }
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -456,6 +472,7 @@ public class GenerateLoad {
         Reporter r;
 
         public void configure(final String params) {
+            System.out.println("*** Initializing generator instance... - params: " + params);
             System.err.println("Got " + params);
             new Thread() {
                 public void run() {
@@ -470,18 +487,50 @@ public class GenerateLoad {
                                 System.err.println("Not an integer: " + parts[2]);
                             }
                         }
+
+                        for (StackTraceElement ste : Thread.currentThread().getStackTrace()) {
+                            System.out.println(ste);
+                        }
+
+                        System.out.println("using request size: " + bytesSize);
                         bytes = new byte[bytesSize];
                         s = new Socket(hostPort[0], Integer.parseInt(hostPort[1]));
                         BufferedReader is = new BufferedReader(new InputStreamReader(s.getInputStream()));
-                        // hello meg to server<--->time from server
-                        s.getOutputStream().write((handshake + "\n").getBytes());
-                        long t1 = System.nanoTime();
-                        String line = is.readLine();
-                        long t3 = System.nanoTime();
-                        if (line != null) {
-                            long t2 = Long.parseLong(line);
-                            timeDrift = t2 - t3;
+
+//                        // hello meg to server<--->time from server
+//                        s.getOutputStream().write((HANDSHAKE + "\n").getBytes());
+//                        long t1 = System.nanoTime();
+//                        String line = is.readLine();
+//                        long t3 = System.nanoTime();
+//                        if (line != null) {
+//                            long t2 = Long.parseLong(line);
+//                            timeDrift = t2 - t3;
+//                        }
+
+                        int i = 0;
+                        long t1;
+                        long t2;
+                        long t3;
+                        String line;
+                        while (i++ < 1000) {
+                            t1 = System.nanoTime();
+                            s.getOutputStream().write((HANDSHAKE + "\n").getBytes());
+                            t1 = (System.nanoTime() + t1) / 2;
+                            line = is.readLine();
+                            t3 = System.nanoTime();
+                            if (line != null) {
+                                t2 = Long.parseLong(line);
+                                timeDrift += t2 - ((t3 + t1) / 2);
+                            }
                         }
+                        timeDrift = (long) (timeDrift / (float) i);
+                        System.out.println("***Average time drift: " + timeDrift);
+                        long tm = System.nanoTime() + timeDrift;
+                        s.getOutputStream().write((tm + "\n").getBytes());
+                        line = is.readLine();
+                        System.out.println("***Server Response: Average time drift: " + line);
+//                        timeDrift = 0;
+
                         zkThread = new ZooKeeperThread(parts[0]);
                         sendThread = new SenderThread(s);
                         // todo: we can get the time from the server::nanoTime
@@ -585,105 +634,104 @@ public class GenerateLoad {
     public static void main(String[] args) throws InterruptedException,
             KeeperException, NoAvailableContainers, DuplicateNameException,
             NoAssignmentException {
-
         args = processOptions(args);
-        if (args.length == 5) {
-            try {
-                StatusWatcher statusWatcher = new StatusWatcher();
-                ZooKeeper zk = new ZooKeeper(args[0], 15000, statusWatcher);
-                if (!statusWatcher.waitConnected(5000)) {
-                    System.err.println("Could not connect to " + args[0]);
-                    return;
-                }
-                InstanceManager im = new InstanceManager(zk, args[1]);
-                ss = new ServerSocket(0);
-                int port = ss.getLocalPort();
-                int serverCount = Integer.parseInt(args[2]);
-                int clientCount = Integer.parseInt(args[3]);
-                StringBuilder quorumHostPort = new StringBuilder();
-                StringBuilder zkHostPort = new StringBuilder();
-                for (int i = 0; i < serverCount; i++) {
-                    String r[] = QuorumPeerInstance.createServer(im, i, leaderServes);
-                    if (i > 0) {
-                        quorumHostPort.append(',');
-                        zkHostPort.append(',');
-                    }
-                    zkHostPort.append(r[0]);     // r[0] == "host:clientPort"
-                    quorumHostPort.append(r[1]); // r[1] == "host:leaderPort:leaderElectionPort"
-                    quorumHostPort.append(";"+(r[0].split(":"))[1]); // Appending ";clientPort"
-                }
-                for (int i = 0; i < serverCount; i++) {
-                    QuorumPeerInstance.startInstance(im, quorumHostPort.toString(), i);
-                }
-                if (leaderOnly) {
-                    int tries = 0;
-                    outer:
-                        while(true) {
-                            Thread.sleep(1000);
-                            IOException lastException = null;
-                            String parts[] = zkHostPort.toString().split(",");
-                            for(int i = 0; i < parts.length; i++) {
-                                try {
-                                    String mode = getMode(parts[i]);
-                                    if (mode.equals("leader")) {
-                                        zkHostPort = new StringBuilder(parts[i]);
-                                        System.out.println("Connecting exclusively to " + zkHostPort.toString());
-                                        break outer;
-                                    }
-                                } catch(IOException e) {
-                                    lastException = e;
-                                }
-                            }
-                            if (tries++ > 3) {
-                                throw lastException;
-                            }
-                        }
-                }
-
-                String icIp = System.getProperty("test.ic.ip");
-                if (icIp == null) {
-                    icIp = InetAddress.getLocalHost().getCanonicalHostName();
-                }
-                for (int i = 0; i < clientCount; i++) {
-                    im.assignInstance("client" + i, GeneratorInstance.class,
-                            zkHostPort.toString() + ' ' + icIp + ':' + port, 1);
-                }
-                new AcceptorThread();
-                new ReporterThread();
-                BufferedReader is = new BufferedReader(new InputStreamReader(System.in));
-                String line;
-                while ((line = is.readLine()) != null) {
-                    try {
-                        String cmdNumber[] = line.split(" ");
-                        if (cmdNumber[0].equals("percentage") && cmdNumber.length > 1) {
-                            int number = Integer.parseInt(cmdNumber[1]);
-                            if (number < 0 || number > 100) {
-                                throw new NumberFormatException("must be between 0 and 100");
-                            }
-                            sendChange(number);
-                        } else if (cmdNumber[0].equals("sleep") && cmdNumber.length > 1) {
-                            int number = Integer.parseInt(cmdNumber[1]);
-                            Thread.sleep(number * 1000);
-                        } else if (cmdNumber[0].equals("save") && cmdNumber.length > 1) {
-                            sf = new PrintStream(cmdNumber[1]);
-                        } else {
-                            System.err.println("Commands must be:");
-                            System.err.println("\tpercentage new_write_percentage");
-                            System.err.println("\tsleep seconds_to_sleep");
-                            System.err.println("\tsave file_to_save_output");
-                        }
-                    } catch (NumberFormatException e) {
-                        System.out.println("Not a valid number: " + e.getMessage());
-                    }
-                }
-            } catch (NumberFormatException e) {
-                doUsage();
-            } catch (IOException e) {
-                e.printStackTrace();
-                System.exit(ExitCode.INVALID_INVOCATION.getValue());
-            }
-        } else {
+        if (args.length != 5) {
             doUsage();
+            return;
+        }
+        try {
+            StatusWatcher statusWatcher = new StatusWatcher();
+            ZooKeeper zk = new ZooKeeper(args[0], 15000, statusWatcher);
+            if (!statusWatcher.waitConnected(5000)) {
+                System.err.println("Could not connect to " + args[0]);
+                return;
+            }
+            InstanceManager im = new InstanceManager(zk, args[1]);
+            ss = new ServerSocket(0);
+            int port = ss.getLocalPort();
+            int serverCount = Integer.parseInt(args[2]);
+            int clientCount = Integer.parseInt(args[3]);
+            StringBuilder quorumHostPort = new StringBuilder();
+            StringBuilder zkHostPort = new StringBuilder();
+            for (int i = 0; i < serverCount; i++) {
+                String r[] = QuorumPeerInstance.createServer(im, i, leaderServes);
+                if (i > 0) {
+                    quorumHostPort.append(',');
+                    zkHostPort.append(',');
+                }
+                zkHostPort.append(r[0]);     // r[0] == "host:clientPort"
+                quorumHostPort.append(r[1]); // r[1] == "host:leaderPort:leaderElectionPort"
+                quorumHostPort.append(";"+(r[0].split(":"))[1]); // Appending ";clientPort"
+            }
+            for (int i = 0; i < serverCount; i++) {
+                QuorumPeerInstance.startInstance(im, quorumHostPort.toString(), i);
+            }
+            if (leaderOnly) {
+                int tries = 0;
+                outer:
+                    while(true) {
+                        Thread.sleep(1000);
+                        IOException lastException = null;
+                        String parts[] = zkHostPort.toString().split(",");
+                        for(int i = 0; i < parts.length; i++) {
+                            try {
+                                String mode = getMode(parts[i]);
+                                if (mode.equals("leader")) {
+                                    zkHostPort = new StringBuilder(parts[i]);
+                                    System.out.println("Connecting exclusively to " + zkHostPort.toString());
+                                    break outer;
+                                }
+                            } catch(IOException e) {
+                                lastException = e;
+                            }
+                        }
+                        if (tries++ > 3) {
+                            throw lastException;
+                        }
+                    }
+            }
+
+            String icIp = System.getProperty("test.ic.ip");
+            if (icIp == null) {
+                icIp = InetAddress.getLocalHost().getCanonicalHostName();
+            }
+            for (int i = 0; i < clientCount; i++) {
+                im.assignInstance("client" + i, GeneratorInstance.class,
+                        zkHostPort.toString() + ' ' + icIp + ':' + port, 1);
+            }
+            new AcceptorThread();
+            new ReporterThread();
+            BufferedReader is = new BufferedReader(new InputStreamReader(System.in));
+            String line;
+            while ((line = is.readLine()) != null) {
+                try {
+                    String cmdNumber[] = line.split(" ");
+                    if (cmdNumber[0].equals("percentage") && cmdNumber.length > 1) {
+                        int number = Integer.parseInt(cmdNumber[1]);
+                        if (number < 0 || number > 100) {
+                            throw new NumberFormatException("must be between 0 and 100");
+                        }
+                        sendChange(number);
+                    } else if (cmdNumber[0].equals("sleep") && cmdNumber.length > 1) {
+                        int number = Integer.parseInt(cmdNumber[1]);
+                        Thread.sleep(number * 1000);
+                    } else if (cmdNumber[0].equals("save") && cmdNumber.length > 1) {
+                        sf = new PrintStream(cmdNumber[1]);
+                    } else {
+                        System.err.println("Commands must be:");
+                        System.err.println("\tpercentage new_write_percentage");
+                        System.err.println("\tsleep seconds_to_sleep");
+                        System.err.println("\tsave file_to_save_output");
+                    }
+                } catch (NumberFormatException e) {
+                    System.out.println("Not a valid number: " + e.getMessage());
+                }
+            }
+        } catch (NumberFormatException e) {
+            doUsage();
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.exit(ExitCode.INVALID_INVOCATION.getValue());
         }
     }
 
