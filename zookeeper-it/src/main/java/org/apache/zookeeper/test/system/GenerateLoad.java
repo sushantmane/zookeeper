@@ -474,6 +474,9 @@ public class GenerateLoad {
         public void configure(final String params) {
             System.out.println("*** Initializing generator instance... - params: " + params);
             System.err.println("Got " + params);
+            for (StackTraceElement ste : Thread.currentThread().getStackTrace()) {
+                System.out.println(ste);
+            }
             new Thread() {
                 public void run() {
                     try {
@@ -486,10 +489,6 @@ public class GenerateLoad {
                             } catch(Exception e) {
                                 System.err.println("Not an integer: " + parts[2]);
                             }
-                        }
-
-                        for (StackTraceElement ste : Thread.currentThread().getStackTrace()) {
-                            System.out.println(ste);
                         }
 
                         System.out.println("using request size: " + bytesSize);
@@ -516,14 +515,18 @@ public class GenerateLoad {
                             t1 = System.nanoTime();
                             s.getOutputStream().write((HANDSHAKE + "\n").getBytes());
                             t1 = (System.nanoTime() + t1) / 2;
+
                             line = is.readLine();
+
                             t3 = System.nanoTime();
                             if (line != null) {
                                 t2 = Long.parseLong(line);
                                 timeDrift += t2 - ((t3 + t1) / 2);
                             }
                         }
+
                         timeDrift = (long) (timeDrift / (float) i);
+
                         System.out.println("***Average time drift: " + timeDrift);
                         long tm = System.nanoTime() + timeDrift;
                         s.getOutputStream().write((tm + "\n").getBytes());
@@ -631,14 +634,15 @@ public class GenerateLoad {
      * @throws NoAvailableContainers
      * @throws NoAssignmentException
      */
-    public static void main(String[] args) throws InterruptedException,
-            KeeperException, NoAvailableContainers, DuplicateNameException,
-            NoAssignmentException {
+    public static void main(String[] args) throws InterruptedException, KeeperException,
+            NoAvailableContainers, DuplicateNameException, NoAssignmentException {
+
         args = processOptions(args);
         if (args.length != 5) {
             doUsage();
             return;
         }
+
         try {
             StatusWatcher statusWatcher = new StatusWatcher();
             ZooKeeper zk = new ZooKeeper(args[0], 15000, statusWatcher);
@@ -646,6 +650,7 @@ public class GenerateLoad {
                 System.err.println("Could not connect to " + args[0]);
                 return;
             }
+
             InstanceManager im = new InstanceManager(zk, args[1]);
             ss = new ServerSocket(0);
             int port = ss.getLocalPort();
