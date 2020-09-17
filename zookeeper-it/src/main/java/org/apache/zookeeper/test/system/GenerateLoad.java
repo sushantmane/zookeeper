@@ -30,6 +30,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.Date;
@@ -71,6 +72,8 @@ public class GenerateLoad {
     static PrintStream clf;
 
     static final String HANDSHAKE = "Hello";
+    static final int SAMPLES = 1001;
+
 
     static {
         try {
@@ -136,7 +139,7 @@ public class GenerateLoad {
 
                 int i = 0;
                 String localTime;
-                while (i++ < 1000) {
+                while (i++ < SAMPLES) {
                     result = is.readLine();
                     localTime = System.nanoTime() + "\n";
                     s.getOutputStream().write(localTime.getBytes());
@@ -483,6 +486,10 @@ public class GenerateLoad {
                         String parts[] = params.split(" ");
                         String hostPort[] = parts[1].split(":");
                         int bytesSize = 1024;
+                        for (String part : parts) {
+                            System.out.println("@@@debug@@@:" + part);
+                        }
+
                         if (parts.length == 3) {
                             try {
                                 bytesSize = Integer.parseInt(parts[2]);
@@ -493,6 +500,9 @@ public class GenerateLoad {
 
                         System.out.println("using request size: " + bytesSize);
                         bytes = new byte[bytesSize];
+                        Random random = new Random();
+                        random.nextBytes(bytes);
+
                         s = new Socket(hostPort[0], Integer.parseInt(hostPort[1]));
                         BufferedReader is = new BufferedReader(new InputStreamReader(s.getInputStream()));
 
@@ -511,7 +521,8 @@ public class GenerateLoad {
                         long t2;
                         long t3;
                         String line;
-                        while (i++ < 1000) {
+                        long[] timeDrifts = new long[SAMPLES];
+                        while (i < SAMPLES) {
                             t1 = System.nanoTime();
                             s.getOutputStream().write((HANDSHAKE + "\n").getBytes());
                             t1 = (System.nanoTime() + t1) / 2;
@@ -521,12 +532,18 @@ public class GenerateLoad {
                             t3 = System.nanoTime();
                             if (line != null) {
                                 t2 = Long.parseLong(line);
-                                timeDrift += t2 - ((t3 + t1) / 2);
+//                                timeDrift += t2 - ((t3 + t1) / 2);
+                                timeDrifts[i] = t2 - ((t3 + t1) / 2);
                             }
+                            i++;
                         }
-
-                        timeDrift = (long) (timeDrift / (float) i);
-
+//                        timeDrift = (long) (timeDrift / (float) i);
+                        Arrays.sort(timeDrifts);
+                        if (SAMPLES % 2 == 0) {
+                            timeDrift = (timeDrifts[SAMPLES / 2] + timeDrifts[SAMPLES / 2 + 1]) / 2;
+                        } else {
+                            timeDrift = timeDrifts[SAMPLES / 2];
+                        }
                         System.out.println("***Average time drift: " + timeDrift);
                         long tm = System.nanoTime() + timeDrift;
                         s.getOutputStream().write((tm + "\n").getBytes());
@@ -702,7 +719,7 @@ public class GenerateLoad {
             }
             for (int i = 0; i < clientCount; i++) {
                 im.assignInstance("client" + i, GeneratorInstance.class,
-                        zkHostPort.toString() + ' ' + icIp + ':' + port, 1);
+                        zkHostPort.toString() + ' ' + icIp + ':' + port + " " + args[4], 1);
             }
             new AcceptorThread();
             new ReporterThread();

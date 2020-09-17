@@ -269,6 +269,7 @@ public class InstanceContainer implements Watcher, AsyncCallback.ChildrenCallbac
                         clazz = instanceSpec.substring(0, spaceIndex);
                         conf = instanceSpec.substring(spaceIndex+1);
                     }
+                    System.out.println("@@@debug@@@ - class:" + clazz + " conf:" + conf + " spec:" + instanceSpec);
                     try {
                         Class<?> c = Class.forName(clazz);
                         i = (Instance) c.getConstructor().newInstance();
