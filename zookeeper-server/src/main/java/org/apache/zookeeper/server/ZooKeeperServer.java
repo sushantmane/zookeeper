@@ -1276,7 +1276,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     }
 
     public void setMinSessionTimeout(int min) {
-        this.minSessionTimeout = min == -1 ? tickTime * 2 : min;
+        this.minSessionTimeout = min == -1 ? tickTime * 200 : min;
         LOG.info("minSessionTimeout set to {}", this.minSessionTimeout);
     }
 
@@ -1285,7 +1285,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     }
 
     public void setMaxSessionTimeout(int max) {
-        this.maxSessionTimeout = max == -1 ? tickTime * 20 : max;
+        this.maxSessionTimeout = max == -1 ? tickTime * 200 : max;
         LOG.info("maxSessionTimeout set to {}", this.maxSessionTimeout);
     }
 

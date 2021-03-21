@@ -459,6 +459,7 @@ public class GenerateLoad {
         ZooKeeperThread zkThread;
         SenderThread sendThread;
         Reporter r;
+        Random random = new Random();
 
         public void configure(final String params) {
             System.err.println("Got " + params);
@@ -466,18 +467,28 @@ public class GenerateLoad {
                 public void run() {
                     try {
                         String parts[] = params.split(" ");
+                        String zkQuorumConnectString = parts[0];
                         String hostPort[] = parts[1].split(":");
                         int bytesSize = 1024;
-                        if (parts.length == 3) {
+                        if (parts.length >= 3) {
                             try {
                                 bytesSize = Integer.parseInt(parts[2]);
                             } catch(Exception e) {
                                 System.err.println("Not an integer: " + parts[2]);
                             }
                         }
+                        if (parts.length >= 4) {
+                            LOG.info("====> my id is: " + parts[3]);
+                            int myid = Integer.parseInt(parts[3]);
+                            //  cs-reed-05.cs.sjsu.edu:40626,cs-reed-04.cs.sjsu.edu:41814,cs-reed-07.cs.sjsu.edu:45506
+                            String[] conStrs = zkQuorumConnectString.trim().split(",");
+                            zkQuorumConnectString = conStrs[myid % conStrs.length];
+                        }
+
                         bytes = new byte[bytesSize];
+                        random.nextBytes(bytes);
                         s = new Socket(hostPort[0], Integer.parseInt(hostPort[1]));
-                        zkThread = new ZooKeeperThread(parts[0]);
+                        zkThread = new ZooKeeperThread(zkQuorumConnectString);
                         sendThread = new SenderThread(s);
                         BufferedReader is = new BufferedReader(new InputStreamReader(s
                                 .getInputStream()));
@@ -645,7 +656,7 @@ public class GenerateLoad {
                                     + ' '
                                     + InetAddress.getLocalHost()
                                             .getCanonicalHostName() + ':'
-                                    + port + " " + args[4], 1);
+                                    + port + " " + args[4] + " " + i, 1);
                 }
                 new AcceptorThread();
                 new ReporterThread();

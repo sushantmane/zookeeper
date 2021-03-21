@@ -201,6 +201,14 @@ public class InstanceManager implements AsyncCallback.ChildrenCallback, Watcher 
             }
         }
 
+        int numClientContainers = 0;
+        for (Entry<String, HashSet<Assigned>> e: assignments.entrySet()) {
+            if (e.getKey().startsWith("cic-")) {
+                numClientContainers++;
+            }
+        }
+
+
         // default case
         if (ics.size() == 0) {
             ics = assignments.entrySet();
@@ -224,6 +232,13 @@ public class InstanceManager implements AsyncCallback.ChildrenCallback, Watcher 
             int icId = 3 - Integer.parseInt(name.substring(name.length() - 1));
             mostIdle = "sic-" + icId;
         }
+
+//        //client
+//        if (name.startsWith("client")) {
+//            int cid = Integer.parseInt(name.substring(6)) % numClientContainers;
+//            cid++;
+//            mostIdle = "cic-" + cid;
+//        }
 
         Assigned a = new Assigned(mostIdle, weight);
         instanceToAssignment.put(name, a);
