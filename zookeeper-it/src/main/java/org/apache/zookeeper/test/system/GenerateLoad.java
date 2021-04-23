@@ -213,7 +213,7 @@ public class GenerateLoad {
                     count = count * 1000 / INTERVAL; // Multiply by 1000 to get
                                                      // reqs/sec
                     if (lastChange != 0
-                            && (lastChange + INTERVAL * 3) < now) {
+                            && (lastChange + INTERVAL * 5) < now) {
                         // We only want to print anything if things have had a
                         // chance to change
 
@@ -335,7 +335,9 @@ public class GenerateLoad {
                     for (int i = 0; i < 300; i++) {
                         try {
                             Thread.sleep(100);
-                            path = zk.create("/client", new byte[16],
+                            int sz = bytes == null ? 0 : bytes.length;
+                            LOG.info("create a znode with data size: " + sz);
+                            path = zk.create("/client", bytes,
                                     Ids.OPEN_ACL_UNSAFE,
                                     CreateMode.EPHEMERAL_SEQUENTIAL);
                             break;

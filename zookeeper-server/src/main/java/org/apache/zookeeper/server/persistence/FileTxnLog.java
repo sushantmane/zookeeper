@@ -151,7 +151,8 @@ public class FileTxnLog implements TxnLog, Closeable {
     volatile FileOutputStream fos = null;
 
     File logDir;
-    private final boolean forceSync = !System.getProperty("zookeeper.forceSync", "yes").equals("no");
+//    private final boolean forceSync = !System.getProperty("zookeeper.forceSync", "yes").equals("no");
+    private final boolean forceSync = false;
     long dbId;
     private final Queue<FileOutputStream> streamsToFlush = new ArrayDeque<>();
     File logFileWrite = null;
